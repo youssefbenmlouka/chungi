@@ -235,7 +235,7 @@ function newState(place, mag){
   return {n:0, turn:'w', step:'main', M:mag,
     w:{S:[place.w.s,0],H:[place.w.h,0],C:null,sFar:false,hFar:false},
     b:{S:[place.b.s,7],H:[place.b.h,7],C:null,sFar:false,hFar:false},
-    lastMag:null, tm:null, sup:null, supNext:null, mm:{w:false,b:false}, tmm:false, winner:null, draw:false, reps:{}, log:[]};
+    first:true, lastMag:null, tm:null, sup:null, supNext:null, mm:{w:false,b:false}, tmm:false, winner:null, draw:false, reps:{}, log:[]};
 }
 function occ(st,c,r){
   var q=[c,r];
@@ -376,12 +376,24 @@ function endTurn(st,depth){
 }
 function afterMain(st,depth){
   var side=st.turn, p=st[side];
+  /* Opening rule: White's first turn is a main move only, with no steed move. */
+  if(st.first){st.first=false; pushLog(st,"Opening rule: White's first turn has no steed move."); endTurn(st,depth); return;}
   if(p.H){
     if(steedMoves(st,side).length){st.step='steed'; return;}
     pushLog(st,sideName(side)+"'s steed has no legal move, so it is skipped.");
     if(canFuse(st,side)){st.step='end'; return;}
   }
   endTurn(st,depth);
+}
+/* Free push: when a player moves the magician onto the row where their own soldier and steed both stand,
+   each of the two may be pushed one square for free (the soldier forward, the steed towards the far row
+   until it has graduated and towards the home row after that). The normal steed move still follows. */
+function pushSq(st,side,who){
+  var p=st[side], q=who==='S'?p.S:p.H; if(!q) return null;
+  var d=who==='S'?fwd(st,side):((side==='w')===!p.hFar?1:-1), t=[q[0],q[1]+d];
+  if(!inB(t[0],t[1])||occ(st,t[0],t[1])) return null;
+  if(who==='S'){ var o=st[other(side)].S; if(touchesM(st,t)||(o&&dist(o,t)<=1)) return null; }
+  return t;
 }
 function apply(st0,a){
   var st=JSON.parse(JSON.stringify(st0)); st.n++;
@@ -417,8 +429,28 @@ function apply(st0,a){
     }
     st.tm={by:side,path:Q}; st.M=Q[Q.length-1]; st.tmm=true;
     pushLog(st,nm+' magician '+Q.map(sqn).join(' to ')+'.'+(st.supNext?' That returns it to the row it came from, so '+sideName(st.supNext)+' earns a super magician.':''));
-    afterMain(st,0); return st;
+    if(p.S&&p.H&&p.S[1]===st.M[1]&&p.H[1]===st.M[1]){
+      st.push={S:!!pushSq(st,side,'S'),H:!!pushSq(st,side,'H')};
+      if(st.push.S||st.push.H){st.step='push'; return st;}
+    }
+    st.push=null; afterMain(st,0); return st;
   }
+  if(a.t==='push'){
+    var tq=pushSq(st,side,a.who); if(!tq||!st.push||!st.push[a.who]) return st0;
+    if(a.who==='S'){
+      var f0=p.S; p.S=tq; if(tq[1]===far(side)) p.sFar=true;
+      pushLog(st,nm+' soldier '+sqn(f0)+' to '+sqn(tq)+' (free push).');
+      if(p.sFar&&tq[1]===home(side)){win(); return st;}
+    } else {
+      var h0=p.H; p.H=tq; var grad=tq[1]===far(side)&&!p.hFar; if(grad) p.hFar=true;
+      pushLog(st,nm+' steed '+sqn(h0)+' to '+sqn(tq)+' (free push).'+(grad?' It is now a graduated steed and can fuse.':''));
+    }
+    st.push[a.who]=false;
+    var oth=a.who==='S'?'H':'S'; if(st.push[oth]&&!pushSq(st,side,oth)) st.push[oth]=false;
+    if(!st.push.S&&!st.push.H){st.push=null; afterMain(st,0);}
+    return st;
+  }
+  if(a.t==='pushdone'){st.push=null; afterMain(st,0); return st;}
   if(a.t==='super'){
     st.M=a.to; st.tm=null; st.sup=null;
     pushLog(st,nm+' placed the super magician on '+sqn(a.to)+'.');
@@ -449,7 +481,7 @@ for(let i=0;i<32;i++){
   for(let j=0;j<32;j++)DIST[i][j]=Math.abs(c-COL(j))+Math.abs(r-ROW(j));
 }
 const HOME=[0,7],FAR=[7,0];
-const DEF={rep:'draw',first:'normal',mag:'none',budget:0,kick2:false,fuseHome:true,wall:'old',sfield:false,suprow:false};
+const DEF={rep:'draw',first:'normal',mag:'none',budget:0,kick2:false,fuseHome:true,wall:'old',sfield:false,suprow:false,push:false};
 function trig(s){const mr=ROW(s.M);return (s.S[0]>=0&&ROW(s.S[0])===mr)||(s.S[1]>=0&&ROW(s.S[1])===mr);}
 function mk(V,ws,wh,bs,bh,M){
   return {t:0,step:V.first==='steed'?1:0,M,S:[ws,28+bs],H:[wh,28+bh],C:[-1,-1],sF:[false,false],hF:[false,false],
@@ -457,7 +489,7 @@ function mk(V,ws,wh,bs,bh,M){
     bud:[V.budget,V.budget],skips:0,keys:null};
 }
 function cp(s){return {t:s.t,step:s.step,M:s.M,S:[s.S[0],s.S[1]],H:[s.H[0],s.H[1]],C:[s.C[0],s.C[1]],sF:[s.sF[0],s.sF[1]],hF:[s.hF[0],s.hF[1]],
-  lm:s.lm,tm:s.tm,sup:s.sup,supN:s.supN,win:s.win,draw:s.draw,first:s.first,mvM:[s.mvM[0],s.mvM[1]],mvT:[s.mvT[0],s.mvT[1]],bud:[s.bud[0],s.bud[1]],skips:s.skips,keys:null};}
+  lm:s.lm,tm:s.tm,sup:s.sup,supN:s.supN,win:s.win,draw:s.draw,first:s.first,pS:!!s.pS,pH:!!s.pH,mvM:[s.mvM[0],s.mvM[1]],mvT:[s.mvT[0],s.mvT[1]],bud:[s.bud[0],s.bud[1]],skips:s.skips,keys:null};}
 function occ(s,q){return q===s.M||q===s.S[0]||q===s.S[1]||q===s.H[0]||q===s.H[1]||q===s.C[0]||q===s.C[1];}
 function inField(s,q){return (s.S[0]>=0&&DIST[s.S[0]][q]<=1)||(s.S[1]>=0&&DIST[s.S[1]][q]<=1);}
 function fwd(s,side){const out=side?-1:1; return s.sF[side]?-out:out;}
@@ -526,7 +558,13 @@ function afterMain(s,V,depth){
   if(s.H[side]>=0){ if(steedMoves(s,side).length){s.step=1;return;} s.skips++; if(canFuse(s,side,V)){s.step=2;return;} }
   endTurn(s,V,depth);
 }
-// action: {k,to,path}  k: 0 soldier,1 cavalier,2 magician,3 super,4 steed,5 fuse,6 end
+function pushSq(s,side,who,V){
+  const q=who?s.H[side]:s.S[side]; if(q<0)return -1;
+  const d=who?(((side===0)===!s.hF[side])?1:-1):fwd(s,side), r=ROW(q)+d; if(r<0||r>7)return -1;
+  const t=r*4+COL(q); if(occ(s,t))return -1;
+  if(!who){ if(DIST[s.M][t]===1)return -1; const o=s.S[side^1]; if(V.sfield&&o>=0&&DIST[o][t]<=1)return -1; }
+  return t;}
+// action: {k,to,path}  k: 0 soldier,1 cavalier,2 magician,3 super,4 steed,5 fuse,6 end,7 push soldier,8 push steed,9 push done
 function legal(s,V,noFuse){
   const side=s.t,a=[];
   if(s.step===0){
@@ -538,6 +576,7 @@ function legal(s,V,noFuse){
   } else if(s.step===1){
     for(const t of steedMoves(s,side))a.push({k:4,to:t});
     if(!noFuse&&canFuse(s,side,V))a.push({k:5});
+  } else if(s.step===3){ if(s.pS)a.push({k:7}); if(s.pH)a.push({k:8}); a.push({k:9});
   } else { if(!noFuse)a.push({k:5}); a.push({k:6}); }
   return a;}
 function apply(s0,a,V){
@@ -554,7 +593,16 @@ function apply(s0,a,V){
     case 2:{const Q=a.path,L=s.lm;
       if(V.suprow){ if(L&&ROW(Q[Q.length-1])===ROW(L[0])&&ROW(L[L.length-1])!==ROW(L[0]))s.supN=side^1; }
       else if(L&&L.length===Q.length){let rev=true; for(let i=0;i<Q.length;i++)if(Q[i]!==L[L.length-1-i]){rev=false;break;} if(rev)s.supN=side^1;}
-      s.tm=Q; s.M=Q[Q.length-1]; s.mvT[side]=true; s.bud[side]--; afterMain(s,V,0); break;}
+      s.tm=Q; s.M=Q[Q.length-1]; s.mvT[side]=true; s.bud[side]--;
+      if(V.push&&s.S[side]>=0&&s.H[side]>=0&&ROW(s.S[side])===ROW(s.M)&&ROW(s.H[side])===ROW(s.M)){
+        s.pS=pushSq(s,side,0,V)>=0; s.pH=pushSq(s,side,1,V)>=0; if(s.pS||s.pH){s.step=3; break;} }
+      afterMain(s,V,0); break;}
+    case 7:{const t=pushSq(s,side,0,V); s.S[side]=t; if(ROW(t)===FAR[side])s.sF[side]=true;
+      if(s.sF[side]&&ROW(t)===HOME[side]){s.win=side; break;}
+      s.pS=false; if(s.pH&&pushSq(s,side,1,V)<0)s.pH=false; if(!s.pH)afterMain(s,V,0); break;}
+    case 8:{const t=pushSq(s,side,1,V); s.H[side]=t; if(ROW(t)===FAR[side])s.hF[side]=true;
+      s.pH=false; if(s.pS&&pushSq(s,side,0,V)<0)s.pS=false; if(!s.pS)afterMain(s,V,0); break;}
+    case 9: s.pS=false; s.pH=false; afterMain(s,V,0); break;
     case 3: s.M=a.to; s.tm=null; s.sup=-1; if(V.wall==='forced'){ if(!hasMain(s,V)){s.skips++; afterMain(s,V,0);} } else afterMain(s,V,0); break;
     case 4: s.H[side]=a.to; if(ROW(a.to)===FAR[side])s.hF[side]=true;
       if(canFuse(s,side,V))s.step=2; else endTurn(s,V,0); break;
@@ -566,7 +614,7 @@ return module.exports;})();
 (function(){
 'use strict';
 var $=function(id){return document.getElementById(id);};
-var RULES=Object.assign({},FAST.DEF,{rep:'draw',mag:'ownconsec',wall:'forced',sfield:true,suprow:true});
+var RULES=Object.assign({},FAST.DEF,{rep:'draw',first:'main',mag:'ownconsec',wall:'forced',sfield:true,suprow:true,push:true});
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function rnd(n){return Math.floor(Math.random()*n);}
 function code(n){var a='abcdefghjkmnpqrstuvwxyz23456789',s='';for(var i=0;i<n;i++)s+=a[rnd(a.length)];return s;}
@@ -602,14 +650,14 @@ var BOT=(function(){
   var F=FAST, W={steed:0.2,ready:1.5,block:0.5};
   var sq=function(p){return p?p[1]*4+p[0]:-1;}, un=function(q){return [q&3,q>>2];}, ix=function(s){return s==='w'?0:1;};
   function toFast(G){
-    return {t:ix(G.turn),step:['main','steed','end'].indexOf(G.step),M:sq(G.M),S:[sq(G.w.S),sq(G.b.S)],H:[sq(G.w.H),sq(G.b.H)],C:[sq(G.w.C),sq(G.b.C)],
+    return {t:ix(G.turn),step:['main','steed','end','push'].indexOf(G.step),pS:!!(G.push&&G.push.S),pH:!!(G.push&&G.push.H),M:sq(G.M),S:[sq(G.w.S),sq(G.b.S)],H:[sq(G.w.H),sq(G.b.H)],C:[sq(G.w.C),sq(G.b.C)],
       sF:[G.w.sFar,G.b.sFar],hF:[G.w.hFar,G.b.hFar],lm:G.lastMag?G.lastMag.path.map(sq):null,tm:G.tm?G.tm.path.map(sq):null,
-      sup:G.sup?ix(G.sup):-1,supN:G.supNext?ix(G.supNext):-1,win:-1,draw:false,first:false,
+      sup:G.sup?ix(G.sup):-1,supN:G.supNext?ix(G.supNext):-1,win:-1,draw:false,first:!!G.first,
       mvM:[!!(G.mm&&G.mm.w),!!(G.mm&&G.mm.b)],mvT:[G.turn==='w'&&!!G.tmm,G.turn==='b'&&!!G.tmm],bud:[0,0],skips:0,keys:null};
   }
   function toRef(a){
     switch(a.k){case 0:return {t:'S',to:un(a.to),kick:!!a.kick}; case 1:return {t:'C',to:un(a.to)}; case 2:return {t:'M',path:a.path.map(un)};
-      case 3:return {t:'super',to:un(a.to)}; case 4:return {t:'H',to:un(a.to)}; case 5:return {t:'fuse'}; default:return {t:'end'};}
+      case 3:return {t:'super',to:un(a.to)}; case 4:return {t:'H',to:un(a.to)}; case 5:return {t:'fuse'}; case 7:return {t:'push',who:'S'}; case 8:return {t:'push',who:'H'}; case 9:return {t:'pushdone'}; default:return {t:'end'};}
   }
   function fside(s,side){
     var cav=s.C[side]>=0,q=cav?s.C[side]:s.S[side],r=F.ROW(q);
@@ -1221,6 +1269,7 @@ function gameHTML(){
     st=(mine&&g.mode!=='local'?'Your turn':who+(g.mode==='local'||g.mode==='watch'?' to move':' is thinking'));
     if(mine){ var s=G.turn;
       if(supMode)hint='Tap any marked square to place the super magician. You still make a main move afterwards.';
+      else if(G.step==='push')hint='The magician is level with your soldier and steed, so each may be pushed one square for free. Your steed move still follows.';
       else if(G.step==='steed')hint='Move your steed one square.';
       else if(G.step==='end')hint='Your steed cannot move. You may fuse or end the turn.';
       else if(sel==='M'&&magPath&&magPath.length>1)hint='The magician landed in a force field, so it must make another L.';
@@ -1229,7 +1278,8 @@ function gameHTML(){
       else hint='Tap your '+(G[s].C?'cavalier':'soldier')+' or the magician, then tap a marked square.';
       if(G.step==='main'&&G.sup===s&&!supMode)btns+='<button class="b gold" data-act="super">Place super magician</button>';
       if(supMode)btns+='<button class="b ghost" data-act="nosuper">Cancel</button>';
-      if(canFuse(G,s))btns+='<button class="b" data-act="fuse">Fuse into a cavalier</button>';
+      if(canFuse(G,s)&&G.step!=='push')btns+='<button class="b" data-act="fuse">Fuse into a cavalier</button>';
+      if(G.step==='push'){ if(G.push&&G.push.S)btns+='<button class="b" data-act="pushS">Push soldier</button>'; if(G.push&&G.push.H)btns+='<button class="b" data-act="pushH">Push steed</button>'; btns+='<button class="b ghost" data-act="pushdone">Continue</button>'; }
       if(G.step==='end')btns+='<button class="b ghost" data-act="end">End turn</button>';
     } else hint=g.mode==='watch'?'Two computer players are playing each other.':'';
   }
@@ -1250,9 +1300,9 @@ function learnHTML(){
   var i=function(t,s){return '<i>'+pieceSVG(t,s)+'</i>';};
   return '<div class="learn"><h1>How to play Chungi</h1>'+
   '<div class="card"><h2>The goal</h2><p>Chungi is a race for two players on a board of 4 columns and 8 rows. Your soldier must touch the far row and then return to your own home row. The first player to complete this round trip wins.</p></div>'+
-  '<div class="card"><h2>Setup and turns</h2><ul><li>Each player secretly places a soldier and a steed on two squares of their home row. Both placements are revealed together.</li><li>Black then places the magician on one of the four central squares, and White moves first.</li><li>A turn has two steps: a main move (your soldier or cavalier, or the magician) and then a compulsory steed move of one square.</li></ul></div>'+
+  '<div class="card"><h2>Setup and turns</h2><ul><li>Each player secretly places a soldier and a steed on two squares of their home row. Both placements are revealed together.</li><li>Black then places the magician on one of the four central squares, and White moves first.</li><li>A turn has two steps: a main move (your soldier or cavalier, or the magician) and then a compulsory steed move of one square.</li><li>Opening rule: White\'s first turn is a main move only, with no steed move. This balances the advantage of moving first.</li></ul></div>'+
   '<div class="card"><h2>'+i('S','w')+'Soldier</h2><ul><li>Moves one square up, down, left or right.</li><li>It cannot enter the magician\'s row, finish on a square touching the magician, or enter the other soldier\'s force field.</li><li>Its force field is its own square and the four squares touching it. The magician can never finish there.</li></ul></div>'+
-  '<div class="card"><h2>'+i('M','')+'Magician</h2><ul><li>One shared piece that either player may move as their main move. It moves in an L, like a knight in chess.</li><li>Its whole row is a barrier that no other piece may enter.</li><li>If an L lands inside a force field, the magician must bounce with another L.</li><li>You may not move the magician on two of your own turns in a row.</li><li>Super magician: if you move the magician to another row and your opponent moves it straight back onto the row it came from, the magician is turned upside down and you may place it on any free square at the start of your next turn, before your main move.</li></ul></div>'+
+  '<div class="card"><h2>'+i('M','')+'Magician</h2><ul><li>One shared piece that either player may move as their main move. It moves in an L, like a knight in chess.</li><li>Its whole row is a barrier that no other piece may enter.</li><li>If an L lands inside a force field, the magician must bounce with another L.</li><li>You may not move the magician on two of your own turns in a row.</li><li>Free push: if you move the magician onto the row where your own soldier and steed both stand, each of them may be pushed one square for free. The soldier goes forward, and the steed goes towards the far row until it has graduated. Your steed move still follows.</li><li>Super magician: if you move the magician to another row and your opponent moves it straight back onto the row it came from, the magician is turned upside down and you may place it on any free square at the start of your next turn, before your main move.</li></ul></div>'+
   '<div class="card"><h2>The wall rule</h2><ul><li>It applies while the magician is on the same row as any soldier. Every main move must then go forward, and the magician cannot be moved.</li><li>Wall kick: a soldier on the magician\'s row moves one square forward, with an optional sideways step first.</li><li>Wall advance: any other soldier, and any cavalier, moves one square forward.</li><li>If that move is not possible, the main move is skipped.</li></ul></div>'+
   '<div class="card"><h2>'+i('H','w')+'Steed and '+pieceSVG('C','w').replace('<span class="pc','<i style="margin-left:4px"><span class="pc')+'</i>cavalier</h2><ul><li>The steed moves one square every turn and cannot enter the magician\'s row.</li><li>When it has stood on the far row it becomes a graduated steed, shown with a gold ring.</li><li>A graduated steed touching its own soldier may fuse with it for free. The cavalier appears on the steed\'s square.</li><li>The cavalier moves one or two squares in a straight line and may jump over a piece, but not over the magician\'s row. The soldier or the cavalier itself must still touch the far row before returning home.</li></ul></div>'+
   '<div class="card"><h2>Drapeau Blanc and the clock</h2><ul><li>If the same position occurs for the third time, the game is a draw, called a Drapeau Blanc.</li><li>Every player starts with 1 minute. The time format only sets how many seconds are added after each completed turn. A player whose clock reaches zero loses.</li></ul></div>'+
@@ -1302,6 +1352,8 @@ document.addEventListener('click',function(e){
   else if(a==='nosuper'){supMode=false;render();}
   else if(a==='fuse'){ if(myTurn())doAct({t:'fuse'}); }
   else if(a==='end'){ if(myTurn())doAct({t:'end'}); }
+  else if(a==='pushS'||a==='pushH'){ if(myTurn()&&game.G.step==='push')doAct({t:'push',who:a.slice(4)}); }
+  else if(a==='pushdone'){ if(myTurn()&&game.G.step==='push')doAct({t:'pushdone'}); }
   else if(a==='resign'){ if(game&&!game.over&&window.confirm('Resign this game?')){ var mc=myColor(); if(game.mode==='net')Net.send({t:'resign'}); finish({winner:other(mc),reason:'by resignation'}); } }
   else if(a==='leave'){ if(confirmLeave())leaveGame(); }
   else if(a==='again'){ var g=game; if(g.mode==='bot')startBot(); else if(g.mode==='watch')startWatch(); else startLocal(); }
