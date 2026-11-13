@@ -121,6 +121,17 @@ button.b:focus-visible,.opt:focus-visible,.chip:focus-visible{outline:2px solid 
 .learn ul{margin:0;padding-left:1.15em;display:flex;flex-direction:column;gap:5px;color:#d9d6cf}
 .learn p{margin:0;color:#d9d6cf}
 .note{color:var(--gold);margin:0;font-size:.9rem}
+.flag{display:inline-block;margin-left:6px;border-radius:2px;vertical-align:-2px;box-shadow:0 0 0 1px rgba(0,0,0,.35);font-size:.7rem;color:var(--muted)}
+.lrow{display:inline-flex;align-items:center}
+.lrow .av{position:relative;width:26px;height:26px;border-radius:4px;flex:none;margin-right:8px;display:inline-block}
+.lrow .flag{margin-left:6px}
+.pick{display:flex;gap:8px;flex-wrap:wrap}
+.pk{position:relative;width:46px;height:46px;border-radius:6px;border:3px solid transparent;cursor:pointer;padding:0}
+.sw{width:30px;height:30px;border-radius:50%;border:3px solid transparent;cursor:pointer;padding:0}
+.pk.on,.sw.on{border-color:#fff}
+.pk:focus-visible,.sw:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.field select{flex:1;min-width:0;background:#1b1a18;border:1px solid var(--line);border-radius:7px;color:var(--fg);padding:10px;font:inherit}
+.ttl{display:inline-block;background:#7c2929;color:#fff;font-size:.72em;font-weight:800;line-height:1;padding:3px 4px 2px;border-radius:3px;margin-right:5px;vertical-align:.08em;letter-spacing:.02em}
 .me .who-btn{background:none;border:0;text-align:left;cursor:pointer;display:flex;flex-direction:column;padding:0;color:var(--fg)}
 .who-btn b{font-size:.95rem}
 .who-btn span{color:var(--muted);font-size:.78rem}
@@ -676,7 +687,7 @@ var game=null, gid=0, selAt=null, sel=null, magPath=null, supMode=false, lastHL=
 function newGame(o){
   gid++; resetSel(); lastHL=[]; shownN=-1; shownPos=null;
   game={id:gid,mode:o.mode,ctl:o.ctl,inc:o.inc,level:o.level||0,names:o.names,phase:'setup',place:{w:null,b:null},locked:{w:false,b:false},pick:{s:null,h:null},
-    sentPlace:false,G:null,clock:{w:60000,b:60000},last:0,over:null,rematch:{me:false,opp:false},note:'',hist:{mag:null,acts:[]},ratings:o.ratings||null,remote:o.remote||null,reported:false,rated:null,row:null,suspect:0,rejoin:false,rematchRoom:false};
+    sentPlace:false,G:null,clock:{w:60000,b:60000},last:0,over:null,rematch:{me:false,opp:false},note:'',hist:{mag:null,acts:[]},ratings:o.ratings||null,prof:o.prof||null,remote:o.remote||null,reported:false,rated:null,row:null,suspect:0,rejoin:false,rematchRoom:false};
   ['w','b'].forEach(function(s){ if(game.ctl[s]==='bot'){game.place[s]=BOT.randomPlace(); game.locked[s]=true;} });
   S.view='game'; checkSetup(); render();
 }
@@ -744,6 +755,26 @@ function startLocal(){ newGame({mode:'local',ctl:{w:'me',b:'me'},inc:S.inc,names
 function startWatch(){ newGame({mode:'watch',ctl:{w:'bot',b:'bot'},inc:null,level:2,names:{w:'Computer A',b:'Computer B'}}); }
 var waitTimer=null;
 function myName(){return Me?Me.username:'Guest';}
+function ttl(t){return t?'<span class="ttl">'+esc(t)+'</span>':'';}
+/* profile icons: a piece on a coloured square, stored as for example "hw-3" */
+var AV_PIECES=[['sw','S','w'],['hw','H','w'],['cw','C','w'],['sb','S','b'],['hb','H','b'],['cb','C','b'],['m','M','']];
+var AV_COLORS=['#565350','#74965a','#4a7fb5','#b5544a','#c9973a','#7a5bb5','#3f8f8a','#b5527f'];
+function avParts(key,side){
+  var m=/^([a-z]{1,2})-([0-7])$/.exec(key||''), pc=null;
+  if(m)pc=AV_PIECES.filter(function(x){return x[0]===m[1];})[0];
+  if(!pc)return {t:'S',side:side||'w',bg:side==='b'?'#8d8a85':'#565350'};
+  return {t:pc[1],side:pc[2],bg:AV_COLORS[+m[2]]};
+}
+function avHTML(key,side){ var a=avParts(key,side); return '<span class="av" style="background:'+a.bg+'">'+pieceSVG(a.t,a.side)+'</span>'; }
+/* country flags: the player chooses a country; the picture comes from flagcdn.com */
+var COUNTRIES='AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW'.split(' ');
+var regionNames=null; try{regionNames=new Intl.DisplayNames(['en'],{type:'region'});}catch(e){}
+function countryName(c){ try{ return regionNames?regionNames.of(c):c; }catch(e){ return c; } }
+function flag(c){
+  if(!/^[A-Z]{2}$/.test(c||''))return '';
+  var lc=c.toLowerCase();
+  return '<img class="flag" src="https://flagcdn.com/w40/'+lc+'.png" width="20" height="15" alt="'+c+'" title="'+esc(countryName(c))+'" onerror="this.style.display=\'none\'">';
+}
 function stopWait(){ clearInterval(waitTimer); waitTimer=null; S.wait=null; }
 function netFail(msg){ stopWait(); S.msg=msg; S.view='home'; S.panel='menu'; render(); }
 function needLogin(){
@@ -756,8 +787,11 @@ function enterGame(remoteId){
   sb.from('games').select('*').eq('id',remoteId).single().then(function(r){
     if(r.error||!r.data||!Me){ netFail('The game could not be loaded.'); return; }
     var row=r.data, me=row.white===Me.id?'w':'b', ctl={w:'net',b:'net'}; ctl[me]='me';
-    newGame({mode:'net',ctl:ctl,inc:row.inc,names:{w:row.white_name,b:row.black_name},ratings:{w:row.white_before,b:row.black_before},remote:row.id});
-    Net.open(row.id,beat);
+    var start=function(t){ newGame({mode:'net',ctl:ctl,inc:row.inc,names:{w:row.white_name,b:row.black_name},ratings:{w:row.white_before,b:row.black_before},remote:row.id,prof:t}); Net.open(row.id,beat); };
+    /* title, icon and flag are optional: if they cannot be read, the game starts without them */
+    sb.from('profiles').select('*').in('id',[row.white,row.black]).then(function(p){
+      var t={w:{},b:{}}; ((p&&p.data)||[]).forEach(function(x){ var o={title:x.title||null,avatar:x.avatar||null,country:x.country||null}; if(x.id===row.white)t.w=o; if(x.id===row.black)t.b=o; }); start(t);
+    }).catch(function(){ start({w:{},b:{}}); });
   });
 }
 function findGame(){
@@ -948,7 +982,7 @@ function logout(){
   Me=null; S.view='home'; S.panel='menu'; render();
 }
 function openProfile(){
-  S.view='profile'; S.history=null; render();
+  S.view='profile'; S.history=null; S.edit=null; render();
   if(!Me)return;
   var uid=Me.id;
   loadProfile(uid).then(function(){
@@ -959,7 +993,7 @@ function openProfile(){
 function openLeaders(){
   S.view='leaders'; S.leaders=null; render();
   if(!sb){ S.leaders=[]; render(); return; }
-  sb.from('profiles').select('username,rating,games,wins,losses,draws').gt('games',0).order('rating',{ascending:false}).limit(50)
+  sb.from('profiles').select('*').gt('games',0).order('rating',{ascending:false}).limit(50)
     .then(function(r){ S.leaders=(r&&r.data)||[]; if(S.view==='leaders')render(); }).catch(function(){ S.leaders=[]; if(S.view==='leaders')render(); });
 }
 function authHTML(){
@@ -976,9 +1010,9 @@ function authHTML(){
 }
 function profileHTML(){
   if(!Me)return authHTML();
-  var h='<div class="learn"><div class="card"><div class="who"><span class="av w">'+pieceSVG('S','w')+'</span><div><h1>'+esc(Me.username)+'</h1><p class="hint">Member since '+new Date(Me.created_at).toLocaleDateString()+'</p></div><div class="rate"><b>'+Me.rating+'</b><span>Rating</span></div></div>'+
+  var h='<div class="learn"><div class="card"><div class="who">'+avHTML(Me.avatar,'w')+'<div><h1>'+ttl(Me.title)+esc(Me.username)+flag(Me.country)+'</h1><p class="hint">Member since '+new Date(Me.created_at).toLocaleDateString()+'</p></div><div class="rate"><b>'+Me.rating+'</b><span>Rating</span></div></div>'+
     '<div class="stats"><div><b>'+Me.games+'</b><span>Games</span></div><div><b>'+Me.wins+'</b><span>Won</span></div><div><b>'+Me.losses+'</b><span>Lost</span></div><div><b>'+Me.draws+'</b><span>Drapeau Blanc</span></div></div>'+
-    '<div class="btns"><button class="b" data-act="nav" data-v="home">Play</button><button class="b ghost" data-act="logout">Log out</button></div></div><div class="card"><h3>Recent rated games</h3>';
+    '<div class="btns"><button class="b" data-act="nav" data-v="home">Play</button><button class="b ghost" data-act="logout">Log out</button></div></div>'+editHTML()+'<div class="card"><h3>Recent rated games</h3>';
   if(!S.history)h+='<div class="spin"></div>';
   else if(!S.history.length)h+='<p class="hint">You have no rated games yet. Play online to get your first result.</p>';
   else { h+='<table class="tbl"><tr><th>Opponent</th><th>Result</th><th>Rating</th><th>Format</th><th>Date</th></tr>';
@@ -987,18 +1021,36 @@ function profileHTML(){
     h+='</table>'; }
   return h+'</div></div>';
 }
+function editHTML(){
+  var e=S.edit; if(!e){ var a=/^([a-z]{1,2})-([0-7])$/.exec(Me.avatar||''); e=S.edit={piece:a?a[1]:'sw',color:a?+a[2]:0,country:Me.country||'',msg:''}; }
+  var h='<div class="card"><h3>Icon</h3><div class="pick">';
+  AV_PIECES.forEach(function(x){ h+='<button class="pk'+(e.piece===x[0]?' on':'')+'" data-act="avpiece" data-v="'+x[0]+'" aria-label="Icon piece" style="background:'+AV_COLORS[e.color]+'">'+pieceSVG(x[1],x[2])+'</button>'; });
+  h+='</div><div class="pick">';
+  AV_COLORS.forEach(function(c,i){ h+='<button class="sw'+(e.color===i?' on':'')+'" data-act="avcolor" data-v="'+i+'" aria-label="Icon colour '+(i+1)+'" style="background:'+c+'"></button>'; });
+  h+='</div><h3>Country flag</h3><div class="field"><select id="country"><option value="">No flag</option>';
+  COUNTRIES.map(function(c){return [countryName(c),c];}).sort(function(x,y){return x[0]<y[0]?-1:1;}).forEach(function(x){ h+='<option value="'+x[1]+'"'+(e.country===x[1]?' selected':'')+'>'+esc(x[0])+'</option>'; });
+  h+='</select>'+flag(e.country)+'</div><div class="btns"><button class="b" data-act="saveprofile">Save</button>'+(e.msg?'<span class="hint" style="align-self:center">'+esc(e.msg)+'</span>':'')+'</div></div>';
+  return h;
+}
+function saveProfile(){
+  var e=S.edit; if(!e||!Me)return;
+  e.msg='Saving'; render();
+  rpc('set_profile',{p_avatar:e.piece+'-'+e.color,p_country:e.country||null}).then(function(){ return loadProfile(Me.id); })
+    .then(function(){ e.msg='Saved'; render(); })
+    .catch(function(err){ e.msg=/set_profile|schema cache|function/i.test(err.message)?'Icons and flags are not set up on the server yet.':'Could not save: '+err.message; render(); });
+}
 function leadersHTML(){
   var h='<div class="learn"><h1>Leaderboard</h1><div class="card">';
   if(!S.leaders)h+='<div class="spin"></div>';
   else if(!S.leaders.length)h+='<p class="hint">No rated games have been played yet. The first players to finish a game will appear here.</p>';
   else { h+='<table class="tbl"><tr><th>#</th><th>Player</th><th>Rating</th><th>Games</th><th>Won</th><th>Lost</th><th>Drawn</th></tr>';
-    S.leaders.forEach(function(p,i){ h+='<tr'+(Me&&p.username===Me.username?' class="me-row"':'')+'><td>'+(i+1)+'</td><td>'+esc(p.username)+'</td><td><b>'+p.rating+'</b></td><td>'+p.games+'</td><td>'+p.wins+'</td><td>'+p.losses+'</td><td>'+p.draws+'</td></tr>'; });
+    S.leaders.forEach(function(p,i){ h+='<tr'+(Me&&p.username===Me.username?' class="me-row"':'')+'><td>'+(i+1)+'</td><td><span class="lrow">'+avHTML(p.avatar,'w')+ttl(p.title)+esc(p.username)+flag(p.country)+'</span></td><td><b>'+p.rating+'</b></td><td>'+p.games+'</td><td>'+p.wins+'</td><td>'+p.losses+'</td><td>'+p.draws+'</td></tr>'; });
     h+='</table>'; }
   return h+'</div></div>';
 }
 function acctHTML(){
   if(!sb)return '';
-  if(Me)return '<button class="who-btn" data-act="nav" data-v="profile"><b>'+esc(Me.username)+'</b><span>Rating '+Me.rating+'</span></button><button class="b ghost sm" data-act="logout">Log out</button>';
+  if(Me)return '<button class="who-btn" data-act="nav" data-v="profile"><b>'+ttl(Me.title)+esc(Me.username)+flag(Me.country)+'</b><span>Rating '+Me.rating+'</span></button><button class="b ghost sm" data-act="logout">Log out</button>';
   return '<button class="b sm" data-act="auth" data-v="signup">Sign up</button><button class="b ghost sm" data-act="auth" data-v="login">Log in</button>';
 }
 
@@ -1141,7 +1193,7 @@ var DEMO={mode:'demo',ctl:{w:'x',b:'x'},phase:'play',over:{},place:{},locked:{},
   G:{n:0,turn:'w',step:'main',M:[2,4],w:{S:[1,2],H:[3,5],C:null,sFar:false,hFar:false},b:{S:null,H:null,C:[2,6],sFar:false,hFar:true},sup:null}};
 function homeHTML(){
   var keep=game; game=DEMO; shownN=-1; shownPos=null; var b=boardHTML(); game=keep; shownN=-1; shownPos=null; lastHL=[];
-  return '<div class="stage"><div class="boardcol"><div class="bar"><span class="av b">'+pieceSVG('S','b')+'</span><span class="nm"><b>Opponent</b><small>Race to the far row and back</small></span></div><div class="board" aria-hidden="true">'+b+'</div><div class="bar"><span class="av w">'+pieceSVG('S','w')+'</span><span class="nm"><b>'+esc(myName())+'</b><small>Your pieces start on row 1</small></span></div></div><div class="sidecol"><div class="card">'+panelHTML()+'</div></div></div>';
+  return '<div class="stage"><div class="boardcol"><div class="bar"><span class="av b">'+pieceSVG('S','b')+'</span><span class="nm"><b>Opponent</b><small>Race to the far row and back</small></span></div><div class="board" aria-hidden="true">'+b+'</div><div class="bar">'+avHTML(Me&&Me.avatar,'w')+'<span class="nm"><b>'+(Me?ttl(Me.title):'')+esc(myName())+(Me?flag(Me.country):'')+'</b><small>Your pieces start on row 1</small></span></div></div><div class="sidecol"><div class="card">'+panelHTML()+'</div></div></div>';
 }
 function barHTML(s){
   var g=game, G=g.G, you=g.ctl[s]==='me'&&g.mode!=='local'?' (you)':'', line='', clk='';
@@ -1149,7 +1201,8 @@ function barHTML(s){
   else line=g.locked[s]?'Pieces placed':'Placing pieces';
   if(g.inc!==null) clk='<span class="clk" id="clk-'+s+'">'+fmt(g.clock[s])+'</span>';
   else if(G&&g.phase==='play'&&!g.over) clk='<span class="clk txt'+(G.turn===s?' on':'')+'">'+(G.turn===s?'To move':'Waiting')+'</span>';
-  return '<div class="bar"><span class="av '+s+'">'+pieceSVG('S',s)+'</span><span class="nm"><b>'+esc(g.names[s])+(g.ratings?' ('+g.ratings[s]+')':'')+you+'</b><small>'+(s==='w'?'White':'Black')+' · '+line+'</small></span>'+clk+'</div>';
+  var pf=(g.prof&&g.prof[s])||{}, mine=g.ctl[s]==='me'&&g.mode==='bot'&&Me?Me:null;
+  return '<div class="bar">'+avHTML(pf.avatar||(mine&&mine.avatar),s)+'<span class="nm"><b>'+ttl(pf.title)+esc(g.names[s])+(g.ratings?' ('+g.ratings[s]+')':'')+flag(pf.country||(mine&&mine.country))+you+'</b><small>'+(s==='w'?'White':'Black')+' · '+line+'</small></span>'+clk+'</div>';
 }
 function gameHTML(){
   var g=game, G=g.G, top=flipped()?'w':'b', bot=other(top), st='', hint='', btns='', a=actor(), mine=myTurn(), who=a?(g.mode==='local'||g.mode==='watch'?sideName(a):(mine?'You':g.names[a])):'';
@@ -1239,6 +1292,9 @@ document.addEventListener('click',function(e){
   else if(a==='auth'){ S.view='auth'; S.authMode=v; S.authMsg=''; S.authForm=null; render(); }
   else if(a==='authmode'){ S.authMode=v; S.authMsg=''; render(); }
   else if(a==='logout'){ logout(); }
+  else if(a==='avpiece'){ if(S.edit){S.edit.piece=v; S.edit.msg=''; render();} }
+  else if(a==='avcolor'){ if(S.edit){S.edit.color=+v; S.edit.msg=''; render();} }
+  else if(a==='saveprofile'){ saveProfile(); }
   else if(a==='copy'){ var l=$('link'); l.select(); try{navigator.clipboard.writeText(l.value);}catch(err){try{document.execCommand('copy');}catch(e2){}} b.textContent='Copied'; }
   else if(a==='lock'){ var pr=placer(); if(pr&&game.pick.s!==null&&game.pick.h!==null){ game.place[pr]={s:game.pick.s,h:game.pick.h}; game.locked[pr]=true; game.pick={s:null,h:null}; checkSetup(); if(game.mode==='net')beat(); render(); } }
   else if(a==='super'){resetSel();supMode=true;render();}
@@ -1254,6 +1310,7 @@ document.addEventListener('input',function(e){
   if(e.target.id==='cinc'){var n=Math.max(0,Math.min(60,Math.round(+e.target.value||0))); S.inc=n;}
   if(e.target.id==='jcode')S.joinCode=e.target.value;
 });
+document.addEventListener('change',function(e){ if(e.target.id==='country'&&S.edit){ S.edit.country=e.target.value; S.edit.msg=''; render(); } });
 document.addEventListener('submit',function(e){ if(e.target.id==='authform'){ e.preventDefault(); doAuth(e.target); } });
 document.addEventListener('keydown',function(e){ if(e.key==='Enter'&&e.target.id==='jcode')joinRoom(e.target.value); });
 window.addEventListener('beforeunload',function(e){ if(game&&!game.over&&game.mode==='net'&&game.phase==='play'){e.preventDefault(); e.returnValue='';} });
@@ -1268,7 +1325,7 @@ if(sb){
     .then(function(){ render(); boot(); }).catch(function(){ boot(); });
   sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_OUT'&&Me){ Me=null; setTimeout(render,0); } });
 } else boot();
-window.__chungi={state:function(){return {view:S.view,panel:S.panel,wait:S.wait,game:game&&{mode:game.mode,phase:game.phase,over:game.over,turn:game.G&&game.G.turn,step:game.G&&game.G.step,me:myColor(),clock:game.clock,inc:game.inc,rated:game.rated,n:game.hist.acts.length,names:game.names},user:Me&&{username:Me.username,rating:Me.rating,games:Me.games},msg:S.msg,authMsg:S.authMsg};}};
+window.__chungi={state:function(){return {view:S.view,panel:S.panel,wait:S.wait,game:game&&{mode:game.mode,phase:game.phase,over:game.over,turn:game.G&&game.G.turn,step:game.G&&game.G.step,me:myColor(),clock:game.clock,inc:game.inc,rated:game.rated,n:game.hist.acts.length,names:game.names,prof:game.prof},user:Me&&{username:Me.username,rating:Me.rating,games:Me.games,avatar:Me.avatar,country:Me.country},msg:S.msg,authMsg:S.authMsg};}};
 })();
 
 </script>
